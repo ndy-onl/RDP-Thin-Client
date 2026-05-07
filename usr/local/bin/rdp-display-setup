@@ -6,15 +6,10 @@
 export DISPLAY=:0
 export XAUTHORITY=/home/rdpuser/.Xauthority
 
-# Set background color to professional neutral gray
+# Set background color to match branding
 xsetroot -solid "#333333"
 
-# Set wallpaper if available
-if [ -f "/usr/local/share/branding/output_wallpaper.png" ]; then
-    feh --bg-fill /usr/local/share/branding/output_wallpaper.png
-fi
-
-# Set cursor theme to a standard arrow instead of X shape
+# Set cursor theme
 export XCURSOR_THEME=Adwaita
 xsetroot -cursor_name left_ptr
 

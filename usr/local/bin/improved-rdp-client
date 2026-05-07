@@ -13,6 +13,11 @@ CONFIG_FILE="/etc/rdp-client/config"
 if [ -f "$CONFIG_FILE" ]; then
     source "$CONFIG_FILE"
 fi
+# Warten auf X-Server
+while ! xset q &>/dev/null; do
+    echo "$(date): Warten auf X-Server..." >> $LOG_FILE
+    sleep 1
+done
 
 # Check if we have a valid server or if we should open settings
 if [ -z "$SERVER" ] || [ "$SERVER" == "rdp-server-ip" ] || [ "$SERVER" == "your.server.ip" ]; then
@@ -23,12 +28,6 @@ if [ -z "$SERVER" ] || [ "$SERVER" == "rdp-server-ip" ] || [ "$SERVER" == "your.
 fi
 
 xhost +local:all >> $LOG_FILE 2>&1
-
-# Warten auf X-Server
-while ! xset q &>/dev/null; do
-    echo "$(date): Warten auf X-Server..." >> $LOG_FILE
-    sleep 1
-done
 
 # RDP Befehl zusammenbauen (UPN Bypass Konfiguration)
 # Note: If USERNAME already contains @, we use it as is.
