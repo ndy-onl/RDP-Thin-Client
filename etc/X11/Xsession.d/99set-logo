@@ -6,5 +6,5 @@ if ! command -v feh &>/dev/null; then
     apt-get update && apt-get install -y feh
 fi
 
-# Position logo with precise geometry
-feh --bg-center --no-xinerama --geometry x100+20+20 "$LOGO_PATH"
+# Position logo in the bottom-right corner with offset
+feh --bg-center --no-xinerama --geometry x120-40-40 "$LOGO_PATH"
