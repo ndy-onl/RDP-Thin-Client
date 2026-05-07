@@ -5,6 +5,9 @@
 LOG_FILE="/tmp/rdp-run.log"
 echo "$(date): Skript gestartet" > $LOG_FILE
 
+export DISPLAY=:0
+export XAUTHORITY=/home/rdpuser/.Xauthority
+
 # CONFIGURATION LOADING
 CONFIG_FILE="/etc/rdp-client/config"
 if [ -f "$CONFIG_FILE" ]; then
@@ -19,8 +22,6 @@ if [ -z "$SERVER" ] || [ "$SERVER" == "rdp-server-ip" ] || [ "$SERVER" == "your.
     [ -f "$CONFIG_FILE" ] && source "$CONFIG_FILE"
 fi
 
-export DISPLAY=:0
-export XAUTHORITY=/home/rdpuser/.Xauthority
 xhost +local:all >> $LOG_FILE 2>&1
 
 # Warten auf X-Server
