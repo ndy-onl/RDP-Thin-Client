@@ -9,11 +9,14 @@ echo "$(date): Skript gestartet" > $LOG_FILE
 CONFIG_FILE="/etc/rdp-client/config"
 if [ -f "$CONFIG_FILE" ]; then
     source "$CONFIG_FILE"
-else
-    echo "$(date): Config file not found, using defaults" >> $LOG_FILE
-    SERVER="rdp-server-ip"
-    USERNAME="user@domain"
-    PASSWORD="password"
+fi
+
+# Check if we have a valid server or if we should open settings
+if [ -z "$SERVER" ] || [ "$SERVER" == "rdp-server-ip" ] || [ "$SERVER" == "your.server.ip" ]; then
+    echo "$(date): No valid server found, launching settings UI" >> $LOG_FILE
+    /usr/local/bin/rdp-settings
+    # Re-source after settings might have changed
+    [ -f "$CONFIG_FILE" ] && source "$CONFIG_FILE"
 fi
 
 export DISPLAY=:0

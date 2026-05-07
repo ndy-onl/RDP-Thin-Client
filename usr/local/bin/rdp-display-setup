@@ -6,8 +6,8 @@
 export DISPLAY=:0
 export XAUTHORITY=/home/rdpuser/.Xauthority
 
-# Set background color to professional dark gray
-xsetroot -solid "#2b2b2b"
+# Set background color to professional neutral gray
+xsetroot -solid "#333333"
 
 # Set wallpaper if available
 if [ -f "/usr/local/share/branding/output_wallpaper.png" ]; then
