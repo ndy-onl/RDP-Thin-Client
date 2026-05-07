@@ -30,13 +30,24 @@ done
 # Note: If USERNAME already contains @, we use it as is.
 RDP_OPTS="/v:$SERVER /u:$USERNAME /p:$PASSWORD /sec:rdp -sec-tls -sec-nla -gfx -rfx /gdi:sw /size:3840x1080 /f -dynamic-resolution /bpp:16 -bitmap-cache -glyph-cache -offscreen-cache -themes -wallpaper -aero +fonts +clipboard /usb:auto /cert-ignore /cert:ignore /cert-tofu /auto-reconnect /auto-reconnect-max-retries:20"
 
-RDP_CMD="xfreerdp $RDP_OPTS"
+# Detect xfreerdp binary (Debian 12 vs 13)
+if command -v xfreerdp3 &>/dev/null; then
+    XFREERDP_BIN="xfreerdp3"
+elif command -v xfreerdp &>/dev/null; then
+    XFREERDP_BIN="xfreerdp"
+else
+    echo "$(date): Error: Neither xfreerdp3 nor xfreerdp found" >> $LOG_FILE
+    exit 1
+fi
 
-echo "$(date): Starte Befehl mit UPN Bypass: xfreerdp /v:$SERVER /u:$USERNAME ..." >> $LOG_FILE
+RDP_CMD="$XFREERDP_BIN $RDP_OPTS"
+
+echo "$(date): Starte Befehl mit $XFREERDP_BIN: $XFREERDP_BIN /v:$SERVER /u:$USERNAME ..." >> $LOG_FILE
 
 while true; do
     # Kill any stray processes
     pkill -9 xfreerdp
+    pkill -9 xfreerdp3
     
     # Execute
     $RDP_CMD >> $LOG_FILE 2>&1

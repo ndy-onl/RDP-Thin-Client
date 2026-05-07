@@ -7,4 +7,4 @@ if ! command -v feh &>/dev/null; then
 fi
 
 # Position logo with precise geometry
-feh --bg-center --no-xinerama --geometry x100+20+20 ""
+feh --bg-center --no-xinerama --geometry x100+20+20 "$LOGO_PATH"
