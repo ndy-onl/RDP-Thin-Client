@@ -1,0 +1,83 @@
+#!/bin/bash
+
+# This script monitors USB devices and dynamically updates FreeRDP USB redirection
+
+# Log file
+LOG_FILE="/var/log/rdp-client/usb-redirect.log"
+
+# Create log directory if it doesn't exist
+mkdir -p $(dirname "$LOG_FILE")
+touch "$LOG_FILE"
+chmod 644 "$LOG_FILE"
+
+# Function to log messages
+log_message() {
+    echo "$(date): $1" >> "$LOG_FILE"
+}
+
+log_message "USB redirection service started"
+
+# Function to get the PID of the running FreeRDP session
+get_freerdp_pid() {
+    pgrep -f "xfreerdp"
+}
+
+# Function to add a USB device to the active FreeRDP session
+add_usb_device() {
+    local vendor_id="$1"
+    local product_id="$2"
+    local freerdp_pid=$(get_freerdp_pid)
+    
+    if [ -n "$freerdp_pid" ]; then
+        log_message "Adding USB device $vendor_id:$product_id to FreeRDP session"
+        # Use xfreerdp-cli to add the device to the active session
+        # Note: This requires FreeRDP to be compiled with dynamic USB redirection support
+        xfreerdp-cli /pid:$freerdp_pid /usb:auto:$vendor_id:$product_id
+    else
+        log_message "No active FreeRDP session found for USB device $vendor_id:$product_id"
+    fi
+}
+
+# Function to handle USB device events
+handle_usb_event() {
+    local action="$1"
+    local device="$2"
+    
+    # Extract vendor and product IDs
+    if [[ "$device" =~ /devices/.*/usb[0-9]+/[0-9]+-[0-9]+/[0-9]+-[0-9]+:[0-9]+\.[0-9]+ ]]; then
+        local usb_path=$(echo "$device" | grep -o '[0-9]\+-[0-9]\+:[0-9]\+\.[0-9]\+')
+        local vendor_id=$(echo "$usb_path" | cut -d'-' -f1)
+        local product_id=$(echo "$usb_path" | cut -d'-' -f2 | cut -d':' -f1)
+        
+        if [ "$action" = "add" ]; then
+            log_message "USB device added: $vendor_id:$product_id"
+            add_usb_device "$vendor_id" "$product_id"
+        elif [ "$action" = "remove" ]; then
+            log_message "USB device removed: $vendor_id:$product_id"
+            # No action needed for removal as FreeRDP handles this automatically
+        fi
+    fi
+}
+
+# Create a udev rule to ensure USB devices are accessible
+cat > /etc/udev/rules.d/99-freerdp-usb.rules << EOF
+ACTION=="add", SUBSYSTEM=="usb", MODE="0664", GROUP="plugdev"
+EOF
+
+# Reload udev rules
+udevadm control --reload-rules
+udevadm trigger
+
+log_message "USB redirection monitoring started"
+
+# Monitor for USB device changes
+udevadm monitor --udev --subsystem-match=usb | while read line; do
+    if [[ "$line" =~ UDEV.*add.*usb ]]; then
+        handle_usb_event "add" "$line"
+    elif [[ "$line" =~ UDEV.*remove.*usb ]]; then
+        handle_usb_event "remove" "$line"
+    fi
+done
+
+# If the monitor fails, log and exit
+log_message "USB monitoring stopped unexpectedly"

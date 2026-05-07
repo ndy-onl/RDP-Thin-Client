@@ -1,0 +1,5 @@
+[Desktop Entry]
+Name=RDP Autologin
+Comment=Start RDP Client Automatically
+Exec=/usr/local/bin/improved-rdp-client
+Type=Application

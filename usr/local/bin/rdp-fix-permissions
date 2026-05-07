@@ -1,0 +1,19 @@
+#!/bin/bash
+
+# This script ensures proper permissions for RDP client configuration files
+
+# Set ownership and permissions for RDP client configuration directory
+chown -R rdpuser:rdpuser /etc/rdp-client
+chmod 755 /etc/rdp-client
+chmod 644 /etc/rdp-client/config
+chmod 600 /etc/rdp-client/credentials
+
+# Set ownership and permissions for RDP client log directory
+mkdir -p /var/log/rdp-client
+chown -R rdpuser:rdpuser /var/log/rdp-client
+chmod 755 /var/log/rdp-client
+
+# Ensure rdpuser has access to necessary groups
+usermod -aG plugdev rdpuser
+
+echo "RDP client permissions fixed."

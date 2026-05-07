@@ -1,0 +1,10 @@
+#!/bin/sh
+LOGO_PATH="/usr/local/share/branding/logo-login.png"
+
+# Ensure feh is installed
+if ! command -v feh &>/dev/null; then
+    apt-get update && apt-get install -y feh
+fi
+
+# Position logo with precise geometry
+feh --bg-center --no-xinerama --geometry x100+20+20 ""

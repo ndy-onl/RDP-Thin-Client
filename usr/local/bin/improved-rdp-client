@@ -1,0 +1,47 @@
+#!/bin/bash
+# FINAL FAIL-SAFE RDP CLIENT - UPN BYPASS VERSION
+# This script is executed by LightDM for rdpuser
+
+LOG_FILE="/tmp/rdp-run.log"
+echo "$(date): Skript gestartet" > $LOG_FILE
+
+# CONFIGURATION LOADING
+CONFIG_FILE="/etc/rdp-client/config"
+if [ -f "$CONFIG_FILE" ]; then
+    source "$CONFIG_FILE"
+else
+    echo "$(date): Config file not found, using defaults" >> $LOG_FILE
+    SERVER="rdp-server-ip"
+    USERNAME="user@domain"
+    PASSWORD="password"
+fi
+
+export DISPLAY=:0
+export XAUTHORITY=/home/rdpuser/.Xauthority
+xhost +local:all >> $LOG_FILE 2>&1
+
+# Warten auf X-Server
+while ! xset q &>/dev/null; do
+    echo "$(date): Warten auf X-Server..." >> $LOG_FILE
+    sleep 1
+done
+
+# RDP Befehl zusammenbauen (UPN Bypass Konfiguration)
+# Note: If USERNAME already contains @, we use it as is.
+RDP_OPTS="/v:$SERVER /u:$USERNAME /p:$PASSWORD /sec:rdp -sec-tls -sec-nla -gfx -rfx /gdi:sw /size:3840x1080 /f -dynamic-resolution /bpp:16 -bitmap-cache -glyph-cache -offscreen-cache -themes -wallpaper -aero +fonts +clipboard /usb:auto /cert-ignore /cert:ignore /cert-tofu /auto-reconnect /auto-reconnect-max-retries:20"
+
+RDP_CMD="xfreerdp $RDP_OPTS"
+
+echo "$(date): Starte Befehl mit UPN Bypass: xfreerdp /v:$SERVER /u:$USERNAME ..." >> $LOG_FILE
+
+while true; do
+    # Kill any stray processes
+    pkill -9 xfreerdp
+    
+    # Execute
+    $RDP_CMD >> $LOG_FILE 2>&1
+    EXIT_CODE=$?
+    echo "$(date): xfreerdp beendet mit Code $EXIT_CODE" >> $LOG_FILE
+    
+    sleep 5
+done

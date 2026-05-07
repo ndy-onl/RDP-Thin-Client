@@ -1,0 +1,72 @@
+#!/bin/bash
+
+# This script manages the RDP client session and ensures it restarts properly
+
+# Log file
+LOG_FILE="/var/log/rdp-client/session-manager.log"
+
+# Create log directory if it doesn't exist
+mkdir -p $(dirname "$LOG_FILE")
+touch "$LOG_FILE"
+chmod 644 "$LOG_FILE"
+
+# Function to log messages
+log_message() {
+    echo "$(date): $1" >> "$LOG_FILE"
+}
+
+log_message "RDP session manager started"
+
+# Ensure proper permissions
+if [ -x /usr/local/bin/rdp-fix-permissions ]; then
+    /usr/local/bin/rdp-fix-permissions
+    log_message "Fixed permissions"
+fi
+
+# Configuration file path
+CONFIG_FILE="/etc/rdp-client/config"
+
+# Check if auto-reconnect is enabled in config
+AUTO_RECONNECT_ENABLED=true
+if [ -f "$CONFIG_FILE" ]; then
+    AUTO_RECONNECT_SETTING=$(grep "^AUTO_RECONNECT=" "$CONFIG_FILE" | cut -d= -f2)
+    if [ "$AUTO_RECONNECT_SETTING" = "false" ]; then
+        AUTO_RECONNECT_ENABLED=false
+        log_message "Auto-reconnect is disabled in configuration"
+    fi
+fi
+
+# Main loop to keep RDP client running
+while true; do
+    log_message "Starting RDP client"
+    
+    # Run the RDP client
+    /usr/local/bin/rdp-client
+    
+    # If RDP client exits, log and restart
+    EXIT_CODE=$?
+    log_message "RDP client exited with code $EXIT_CODE"
+    
+    # Check if we need to restart LightDM instead
+    if [ $EXIT_CODE -eq 0 ]; then
+        log_message "Normal exit, checking auto-reconnect setting"
+        
+        if [ "$AUTO_RECONNECT_ENABLED" = true ]; then
+            # Wait a significant time before restarting to prevent rapid reconnection
+            log_message "Auto-reconnect is enabled, waiting 30 seconds before reconnecting"
+            sleep 30
+            log_message "Restarting RDP client after delay"
+        else
+            log_message "Auto-reconnect is disabled, not restarting RDP client"
+            # Exit the loop and the script
+            break
+        fi
+    else
+        log_message "Abnormal exit, restarting LightDM"
+        systemctl restart lightdm
+        exit 0
+    fi
+done
+
+log_message "Session manager exiting"
+exit 0

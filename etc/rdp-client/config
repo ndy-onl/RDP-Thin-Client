@@ -1,0 +1,7 @@
+SERVER=your.rdp-server.address
+DOMAIN=YOURDOMAIN
+USERNAME=your_username
+PASSWORD=your_password
+USB_REDIRECTION=true
+IGNORE_CERTIFICATE=true
+AUTO_RECONNECT=true

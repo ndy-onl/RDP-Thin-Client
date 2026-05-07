@@ -1,0 +1,12 @@
+[Unit]
+Description=Fix RDP Client Permissions
+After=network.target
+Before=lightdm.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/rdp-fix-permissions
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

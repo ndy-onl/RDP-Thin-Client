@@ -1,0 +1,187 @@
+#!/bin/bash
+
+# Improved RDP client script with better debugging and error handling
+
+# Log file for debugging
+LOG_FILE="/var/log/rdp-client-debug.log"
+mkdir -p $(dirname "$LOG_FILE")
+touch "$LOG_FILE"
+chmod 644 "$LOG_FILE"
+
+# Function to log messages
+log_debug() {
+    echo "$(date): $1" >> "$LOG_FILE"
+}
+
+log_debug "RDP client started"
+
+# Configuration file path
+CONFIG_FILE="/etc/rdp-client/config"
+
+# Create config directory if it doesn't exist
+mkdir -p /etc/rdp-client
+
+# Create default config file if it doesn't exist
+if [ ! -f "$CONFIG_FILE" ]; then
+    echo "SERVER=" > "$CONFIG_FILE"
+    echo "DOMAIN=" >> "$CONFIG_FILE"
+    echo "USERNAME=" >> "$CONFIG_FILE"
+    echo "USB_REDIRECTION=true" >> "$CONFIG_FILE"
+    echo "IGNORE_CERTIFICATE=true" >> "$CONFIG_FILE"
+    echo "AUTO_RECONNECT=false" >> "$CONFIG_FILE"
+    chmod 644 "$CONFIG_FILE"
+    log_debug "Created default config file"
+fi
+
+# Source the configuration
+source "$CONFIG_FILE"
+log_debug "Loaded configuration: SERVER=$SERVER, USERNAME=$USERNAME, DOMAIN=$DOMAIN"
+
+# Function to show settings dialog
+show_settings_dialog() {
+    log_debug "Opening settings dialog"
+    
+    # Make sure zenity is installed
+    if ! command -v zenity &> /dev/null; then
+        log_debug "Zenity not found, installing..."
+        apt-get update && apt-get install -y zenity
+    fi
+    
+    # Set display explicitly
+    export DISPLAY=:0
+    xhost +local: > /dev/null 2>&1
+    
+    # Show settings dialog
+    zenity --info --title="RDP Settings" --text="Opening RDP connection settings..." --timeout=2
+    /usr/local/bin/rdp-settings
+    
+    # Reload configuration after settings dialog
+    source "$CONFIG_FILE"
+    log_debug "Settings updated: SERVER=$SERVER, USERNAME=$USERNAME, DOMAIN=$DOMAIN"
+    
+    # Return to main flow
+    return 0
+}
+
+# Check if server is configured, if not show settings dialog
+if [ -z "$SERVER" ] || [ -z "$USERNAME" ]; then
+    log_debug "Server or username not configured, showing settings dialog"
+    show_settings_dialog
+fi
+
+# Check if settings button was clicked
+if [ "$1" = "--settings" ]; then
+    log_debug "Settings flag detected, showing settings dialog"
+    show_settings_dialog
+    exit 0
+fi
+
+# Build FreeRDP command
+RDP_CMD="xfreerdp /v:$SERVER"
+
+# Add domain and username if provided
+if [ -n "$DOMAIN" ] && [ -n "$USERNAME" ]; then
+    RDP_CMD="$RDP_CMD /d:$DOMAIN /u:$USERNAME"
+elif [ -n "$USERNAME" ]; then
+    RDP_CMD="$RDP_CMD /u:$USERNAME"
+fi
+
+# Add fullscreen mode
+RDP_CMD="$RDP_CMD /f"
+
+# Add USB redirection if enabled
+if [ "$USB_REDIRECTION" = "true" ]; then
+    RDP_CMD="$RDP_CMD /usb:auto"
+fi
+
+# Add certificate ignore if enabled
+if [ "$IGNORE_CERTIFICATE" = "true" ]; then
+    RDP_CMD="$RDP_CMD /cert-ignore /cert:ignore /cert-tofu"
+fi
+
+# Add auto-reconnect if enabled
+if [ "$AUTO_RECONNECT" = "true" ]; then
+    RDP_CMD="$RDP_CMD /auto-reconnect /auto-reconnect-max-retries:20"
+fi
+
+log_debug "Built RDP command: $RDP_CMD (without password)"
+
+# Prompt for password using a very simple approach
+export DISPLAY=:0
+xhost +local: > /dev/null 2>&1
+
+# Create a simple text file with instructions
+INSTRUCTIONS_FILE=$(mktemp)
+cat > "$INSTRUCTIONS_FILE" << EOF
+RDP Login Instructions:
+
+1. Enter your password in the dialog box
+2. Click "OK" to connect
+3. Click "Cancel" to open settings
+
+Press F8 at any time to open settings
+EOF
+
+# Show the instructions
+zenity --text-info --title="RDP Login Instructions" --filename="$INSTRUCTIONS_FILE" --width=400 --height=200 --timeout=5 &
+
+# Simple password dialog
+PASSWORD=$(zenity --password --title="RDP Login" --text="Enter password for $USERNAME@$SERVER:" --width=400 --height=150)
+DIALOG_RESULT=$?
+
+log_debug "Password dialog result: $DIALOG_RESULT"
+
+# Clean up instructions file
+rm -f "$INSTRUCTIONS_FILE"
+
+# Check if the user wants to access settings
+if [ $DIALOG_RESULT -eq 1 ]; then
+    log_debug "User clicked Cancel, opening settings"
+    show_settings_dialog
+    
+    # After settings dialog is closed, restart the client
+    log_debug "Restarting RDP client after settings"
+    exec "$0"
+    exit 0
+elif [ -n "$PASSWORD" ]; then
+    # User entered a password
+    log_debug "Password entered, adding to command"
+    RDP_CMD="$RDP_CMD /p:$PASSWORD"
+else
+    # Empty password
+    log_debug "Empty password, continuing with empty password"
+    RDP_CMD="$RDP_CMD /p:"
+fi
+
+# Execute FreeRDP with error handling
+log_debug "Executing RDP command"
+$RDP_CMD
+RDP_EXIT_CODE=$?
+
+log_debug "FreeRDP exited with code: $RDP_EXIT_CODE"
+
+# Check if connection failed
+if [ $RDP_EXIT_CODE -ne 0 ]; then
+    log_debug "Connection failed with exit code $RDP_EXIT_CODE"
+    
+    # Show error message with option to open settings
+    zenity --question --title="Connection Failed" \
+           --text="Failed to connect to $SERVER.\nError code: $RDP_EXIT_CODE\n\nWould you like to open settings?" \
+           --ok-label="Open Settings" --cancel-label="Close" --width=400
+    
+    if [ $? -eq 0 ]; then
+        log_debug "User chose to open settings after error"
+        show_settings_dialog
+        
+        # After settings dialog is closed, restart the client
+        log_debug "Restarting RDP client after settings"
+        exec "$0"
+        exit 0
+    fi
+    
+    # Return error code
+    exit $RDP_EXIT_CODE
+fi
+
+log_debug "RDP client exiting normally"
+exit 0

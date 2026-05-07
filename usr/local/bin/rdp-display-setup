@@ -1,0 +1,29 @@
+#!/bin/bash
+
+# This script sets up the display for the RDP client
+
+# Set up environment
+export DISPLAY=:0
+export XAUTHORITY=/home/rdpuser/.Xauthority
+
+# Set background color
+xsetroot -solid "#2c3e50"
+
+# Set cursor theme to a standard arrow instead of X shape
+export XCURSOR_THEME=Adwaita
+xsetroot -cursor_name left_ptr
+
+# Create desktop directory and add RDP settings shortcut
+mkdir -p /home/rdpuser/Desktop
+cp /usr/share/applications/rdp-settings.desktop /home/rdpuser/Desktop/
+chown -R rdpuser:rdpuser /home/rdpuser/Desktop
+
+# Fix permissions for config files
+mkdir -p /etc/rdp-client
+chown -R rdpuser:rdpuser /etc/rdp-client
+chmod 755 /etc/rdp-client
+
+# Start the RDP client
+
+
+exit 0

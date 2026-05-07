@@ -1,0 +1,16 @@
+[Unit]
+Description=RDP Client Autologin
+After=network.target lightdm.service
+Wants=lightdm.service
+
+[Service]
+Type=simple
+User=rdpuser
+Environment="DISPLAY=:0"
+Environment="XAUTHORITY=/home/rdpuser/.Xauthority"
+ExecStart=/usr/local/bin/improved-rdp-client
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

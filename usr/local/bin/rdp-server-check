@@ -1,0 +1,150 @@
+#!/bin/bash
+
+# RDP Server Connection Check Tool
+# This script helps verify connectivity to the RDP server
+
+# Configuration file path
+CONFIG_FILE="/etc/rdp-client/config"
+
+# Function to display usage
+show_usage() {
+    echo "RDP Server Connection Check"
+    echo "Usage: $0 [options]"
+    echo ""
+    echo "Options:"
+    echo "  -s, --server SERVER   Test connection to specified server"
+    echo "  -c, --check           Check connection to current configured server"
+    echo "  -u, --update          Update server configuration"
+    echo "  -h, --help            Show this help message"
+    echo ""
+    echo "Example:"
+    echo "  $0 --check            # Check current server configuration"
+    echo "  $0 --server 192.168.1.100   # Test connection to 192.168.1.100"
+    echo "  $0 --update           # Update server configuration"
+}
+
+# Function to check server connectivity
+check_server() {
+    local SERVER="$1"
+    local PORT=$(echo "$SERVER" | grep -o ':[0-9]*$' | cut -d: -f2)
+    local HOST=$(echo "$SERVER" | cut -d: -f1)
+    PORT=${PORT:-3389}  # Default RDP port if not specified
+
+    echo -e "\n\033[1;34mChecking connectivity to $HOST:$PORT...\033[0m"
+
+    # Try to ping the server first
+    echo -n "Ping test: "
+    if ping -c 1 -W 2 "$HOST" > /dev/null 2>&1; then
+        echo -e "\033[1;32mSUCCESS\033[0m"
+        SERVER_REACHABLE_PING=true
+    else
+        echo -e "\033[1;31mFAILED\033[0m"
+        SERVER_REACHABLE_PING=false
+    fi
+
+    # Try TCP connection
+    echo -n "RDP port connection test: "
+    if nc -z -w2 "$HOST" "$PORT" > /dev/null 2>&1; then
+        echo -e "\033[1;32mSUCCESS\033[0m"
+        SERVER_REACHABLE_TCP=true
+    else
+        echo -e "\033[1;31mFAILED\033[0m"
+        SERVER_REACHABLE_TCP=false
+    fi
+
+    # Overall result
+    echo -n "Overall connection status: "
+    if [ "$SERVER_REACHABLE_PING" = "true" ] || [ "$SERVER_REACHABLE_TCP" = "true" ]; then
+        echo -e "\033[1;32mSERVER REACHABLE\033[0m"
+        return 0
+    else
+        echo -e "\033[1;31mSERVER NOT REACHABLE\033[0m"
+        return 1
+    fi
+}
+
+# Function to update server configuration
+update_config() {
+    # Source the current configuration
+    if [ -f "$CONFIG_FILE" ]; then
+        source "$CONFIG_FILE"
+    fi
+
+    echo -e "\n\033[1;34mRDP Server Configuration Update\033[0m"
+    echo "Current settings:"
+    echo "  Server: $SERVER"
+    echo "  Domain: $DOMAIN"
+    echo "  Username: $USERNAME"
+    echo "  USB Redirection: $USB_REDIRECTION"
+    echo "  Ignore Certificate: $IGNORE_CERTIFICATE"
+    echo "  Auto Reconnect: $AUTO_RECONNECT"
+    echo ""
+
+    # Get new settings
+    read -p "Enter server address [leave empty to keep $SERVER]: " NEW_SERVER
+    read -p "Enter domain [leave empty to keep $DOMAIN]: " NEW_DOMAIN
+    read -p "Enter username [leave empty to keep $USERNAME]: " NEW_USERNAME
+    
+    # Update configuration
+    if [ -n "$NEW_SERVER" ]; then
+        sed -i "s/^SERVER=.*/SERVER=$NEW_SERVER/" "$CONFIG_FILE"
+        SERVER="$NEW_SERVER"
+    fi
+    
+    if [ -n "$NEW_DOMAIN" ]; then
+        sed -i "s/^DOMAIN=.*/DOMAIN=$NEW_DOMAIN/" "$CONFIG_FILE"
+        DOMAIN="$NEW_DOMAIN"
+    fi
+    
+    if [ -n "$NEW_USERNAME" ]; then
+        sed -i "s/^USERNAME=.*/USERNAME=$NEW_USERNAME/" "$CONFIG_FILE"
+        USERNAME="$NEW_USERNAME"
+    fi
+
+    echo -e "\n\033[1;32mConfiguration updated!\033[0m"
+    echo "New settings:"
+    echo "  Server: $SERVER"
+    echo "  Domain: $DOMAIN"
+    echo "  Username: $USERNAME"
+    
+    # Test connection to the updated server
+    if [ -n "$SERVER" ]; then
+        echo -e "\nTesting connection to updated server..."
+        check_server "$SERVER"
+    fi
+}
+
+# Handle command-line arguments
+case "$1" in
+    -c|--check)
+        if [ -f "$CONFIG_FILE" ]; then
+            source "$CONFIG_FILE"
+            if [ -n "$SERVER" ]; then
+                echo "Checking connection to configured server: $SERVER"
+                check_server "$SERVER"
+            else
+                echo "ERROR: No server configured in $CONFIG_FILE"
+                exit 1
+            fi
+        else
+            echo "ERROR: Configuration file not found: $CONFIG_FILE"
+            exit 1
+        fi
+        ;;
+    -s|--server)
+        if [ -z "$2" ]; then
+            echo "ERROR: Please specify a server address"
+            show_usage
+            exit 1
+        fi
+        check_server "$2"
+        ;;
+    -u|--update)
+        update_config
+        ;;
+    -h|--help|*)
+        show_usage
+        ;;
+esac
+
+exit 0

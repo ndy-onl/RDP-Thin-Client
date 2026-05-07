@@ -1,0 +1,498 @@
+#!/bin/bash
+
+# Improved RDP Settings Application
+# This script provides a more user-friendly GUI for configuring RDP connection settings
+
+# Configuration file path
+CONFIG_FILE="/etc/rdp-client/config"
+CREDENTIALS_FILE="/etc/rdp-client/credentials"
+
+# Create config directory if it doesn't exist
+mkdir -p /etc/rdp-client
+
+# Create default config file if it doesn't exist
+if [ ! -f "$CONFIG_FILE" ]; then
+    echo "SERVER=" > "$CONFIG_FILE"
+    echo "DOMAIN=" >> "$CONFIG_FILE"
+    echo "USERNAME=" >> "$CONFIG_FILE"
+    echo "USB_REDIRECTION=true" >> "$CONFIG_FILE"
+    echo "IGNORE_CERTIFICATE=true" >> "$CONFIG_FILE"
+    echo "AUTO_RECONNECT=true" >> "$CONFIG_FILE"
+    chmod 644 "$CONFIG_FILE"
+fi
+
+# Create credentials file if it doesn't exist
+if [ ! -f "$CREDENTIALS_FILE" ]; then
+    touch "$CREDENTIALS_FILE"
+    chmod 600 "$CREDENTIALS_FILE"
+fi
+
+# Make sure zenity is installed
+if ! command -v zenity &> /dev/null; then
+    echo "Zenity is not installed. Installing..."
+    apt-get update && apt-get install -y zenity
+fi
+
+# Get current settings
+CURRENT_SERVER=$(grep "^SERVER=" "$CONFIG_FILE" | cut -d= -f2)
+CURRENT_DOMAIN=$(grep "^DOMAIN=" "$CONFIG_FILE" | cut -d= -f2)
+CURRENT_USERNAME=$(grep "^USERNAME=" "$CONFIG_FILE" | cut -d= -f2)
+CURRENT_USB_REDIRECTION=$(grep "^USB_REDIRECTION=" "$CONFIG_FILE" | cut -d= -f2)
+CURRENT_IGNORE_CERTIFICATE=$(grep "^IGNORE_CERTIFICATE=" "$CONFIG_FILE" | cut -d= -f2)
+CURRENT_AUTO_RECONNECT=$(grep "^AUTO_RECONNECT=" "$CONFIG_FILE" | cut -d= -f2)
+
+# Create temporary HTML file for the settings dialog
+TEMP_HTML=$(mktemp --suffix=.html)
+cat > "$TEMP_HTML" << EOF
+<!DOCTYPE html>
+<html>
+<head>
+    <title>RDP Connection Settings</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f5f5f5;
+            margin: 0;
+            padding: 20px;
+            color: #333;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background-color: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            padding: 20px;
+        }
+        h1 {
+            color: #2c3e50;
+            margin-top: 0;
+            padding-bottom: 10px;
+            border-bottom: 1px solid #eee;
+            font-size: 24px;
+        }
+        .tabs {
+            display: flex;
+            margin-bottom: 20px;
+            border-bottom: 1px solid #ddd;
+        }
+        .tab {
+            padding: 10px 20px;
+            cursor: pointer;
+            border: 1px solid transparent;
+            border-bottom: none;
+            margin-right: 5px;
+            border-radius: 4px 4px 0 0;
+            font-weight: bold;
+            font-size: 16px;
+        }
+        .tab.active {
+            background-color: white;
+            border-color: #ddd;
+            color: #2c3e50;
+            position: relative;
+        }
+        .tab.active:after {
+            content: '';
+            position: absolute;
+            bottom: -1px;
+            left: 0;
+            right: 0;
+            height: 1px;
+            background-color: white;
+        }
+        .tab:hover:not(.active) {
+            background-color: #f8f8f8;
+        }
+        .tab-content {
+            display: none;
+            padding: 20px 0;
+        }
+        .tab-content.active {
+            display: block;
+        }
+        .form-group {
+            margin-bottom: 20px;
+        }
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: bold;
+            color: #444;
+        }
+        .help-text {
+            font-size: 13px;
+            color: #666;
+            margin-top: 4px;
+        }
+        input[type="text"],
+        input[type="password"] {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 16px;
+            box-sizing: border-box;
+        }
+        input[type="text"]:focus,
+        input[type="password"]:focus {
+            border-color: #2c3e50;
+            outline: none;
+            box-shadow: 0 0 5px rgba(44, 62, 80, 0.2);
+        }
+        .toggle-container {
+            display: flex;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+        .toggle-label {
+            margin-left: 10px;
+            font-weight: normal;
+        }
+        .toggle {
+            position: relative;
+            display: inline-block;
+            width: 60px;
+            height: 34px;
+        }
+        .toggle input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+        .slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: #ccc;
+            transition: .4s;
+            border-radius: 34px;
+        }
+        .slider:before {
+            position: absolute;
+            content: "";
+            height: 26px;
+            width: 26px;
+            left: 4px;
+            bottom: 4px;
+            background-color: white;
+            transition: .4s;
+            border-radius: 50%;
+        }
+        input:checked + .slider {
+            background-color: #2c3e50;
+        }
+        input:checked + .slider:before {
+            transform: translateX(26px);
+        }
+        .buttons {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 30px;
+            padding-top: 20px;
+            border-top: 1px solid #eee;
+        }
+        .btn {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: bold;
+            transition: background-color 0.2s;
+        }
+        .btn-primary {
+            background-color: #2c3e50;
+            color: white;
+        }
+        .btn-secondary {
+            background-color: #95a5a6;
+            color: white;
+        }
+        .btn-success {
+            background-color: #27ae60;
+            color: white;
+        }
+        .btn:hover {
+            opacity: 0.9;
+        }
+        .btn-group {
+            display: flex;
+            gap: 10px;
+        }
+        .status {
+            margin-top: 20px;
+            padding: 15px;
+            border-radius: 4px;
+            display: none;
+        }
+        .status.success {
+            background-color: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        .status.error {
+            background-color: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        .required:after {
+            content: " *";
+            color: #e74c3c;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>RDP Connection Settings</h1>
+        
+        <div class="tabs">
+            <div class="tab active" onclick="switchTab('basic')">Basic Settings</div>
+            <div class="tab" onclick="switchTab('advanced')">Advanced Settings</div>
+        </div>
+        
+        <div id="basic" class="tab-content active">
+            <div class="form-group">
+                <label for="server" class="required">Server Address</label>
+                <input type="text" id="server" value="$CURRENT_SERVER" placeholder="e.g., 192.168.1.100 or server.domain.com">
+                <div class="help-text">Enter the IP address or hostname of the Windows RDP server</div>
+            </div>
+            
+            <div class="form-group">
+                <label for="username" class="required">Username</label>
+                <input type="text" id="username" value="$CURRENT_USERNAME" placeholder="e.g., Administrator or domain\\user">
+                <div class="help-text">Enter the username to log in to the Windows server</div>
+            </div>
+            
+            <div class="form-group">
+                <label for="domain">Domain (Optional)</label>
+                <input type="text" id="domain" value="$CURRENT_DOMAIN" placeholder="e.g., COMPANY">
+                <div class="help-text">Enter the Windows domain name if applicable</div>
+            </div>
+            
+            <div class="form-group">
+                <label for="password">Password</label>
+                <input type="password" id="password" placeholder="Password will not be saved" disabled>
+                <div class="help-text">For security reasons, password must be entered at each login</div>
+            </div>
+        </div>
+        
+        <div id="advanced" class="tab-content">
+            <div class="form-group">
+                <label>USB Redirection</label>
+                <div class="toggle-container">
+                    <label class="toggle">
+                        <input type="checkbox" id="usb_redirection" ${CURRENT_USB_REDIRECTION == "true" ? "checked" : ""}>
+                        <span class="slider"></span>
+                    </label>
+                    <span class="toggle-label">Enable USB device forwarding to Windows</span>
+                </div>
+                <div class="help-text">Allows USB devices (card readers, scanners, etc.) to be used in the Windows session</div>
+            </div>
+            
+            <div class="form-group">
+                <label>Certificate Handling</label>
+                <div class="toggle-container">
+                    <label class="toggle">
+                        <input type="checkbox" id="ignore_certificate" ${CURRENT_IGNORE_CERTIFICATE == "true" ? "checked" : ""}>
+                        <span class="slider"></span>
+                    </label>
+                    <span class="toggle-label">Ignore certificate warnings</span>
+                </div>
+                <div class="help-text">Allows connections to servers with expired or self-signed certificates</div>
+            </div>
+            
+        <div class="form-group">
+            <label>Auto Reconnect</label>
+            <div class="toggle-container">
+                <label class="toggle">
+                    <input type="checkbox" id="auto_reconnect" ${CURRENT_AUTO_RECONNECT == "true" ? "checked" : ""}>
+                    <span class="slider"></span>
+                </label>
+                <span class="toggle-label">Automatically reconnect if connection drops</span>
+            </div>
+            <div class="help-text">Attempts to restore the connection if it's interrupted. <strong>Note:</strong> Disabling this will prevent automatic reconnection when the session ends.</div>
+        </div>
+        </div>
+        
+        <div class="buttons">
+            <button class="btn btn-secondary" onclick="cancelSettings()">Cancel</button>
+            <div class="btn-group">
+                <button class="btn btn-success" onclick="testConnection()">Test Connection</button>
+                <button class="btn btn-primary" onclick="saveSettings()">Save & Connect</button>
+            </div>
+        </div>
+        
+        <div id="status" class="status"></div>
+    </div>
+
+    <script>
+        function switchTab(tabId) {
+            // Hide all tab contents
+            document.querySelectorAll('.tab-content').forEach(content => {
+                content.classList.remove('active');
+            });
+            
+            // Deactivate all tabs
+            document.querySelectorAll('.tab').forEach(tab => {
+                tab.classList.remove('active');
+            });
+            
+            // Activate the selected tab and content
+            document.getElementById(tabId).classList.add('active');
+            document.querySelector(`.tab[onclick="switchTab('${tabId}')"]`).classList.add('active');
+        }
+        
+        function validateForm() {
+            const server = document.getElementById('server').value.trim();
+            const username = document.getElementById('username').value.trim();
+            
+            if (!server) {
+                showStatus('Server address is required', false);
+                return false;
+            }
+            
+            if (!username) {
+                showStatus('Username is required', false);
+                return false;
+            }
+            
+            return true;
+        }
+        
+        function showStatus(message, isSuccess) {
+            const statusElement = document.getElementById('status');
+            statusElement.textContent = message;
+            statusElement.style.display = 'block';
+            
+            if (isSuccess) {
+                statusElement.className = 'status success';
+            } else {
+                statusElement.className = 'status error';
+            }
+            
+            // Auto-hide after 5 seconds
+            setTimeout(() => {
+                statusElement.style.display = 'none';
+            }, 5000);
+        }
+        
+        function getSettings() {
+            return {
+                server: document.getElementById('server').value.trim(),
+                username: document.getElementById('username').value.trim(),
+                domain: document.getElementById('domain').value.trim(),
+                password: document.getElementById('password').value,
+                usb_redirection: document.getElementById('usb_redirection').checked ? 'true' : 'false',
+                ignore_certificate: document.getElementById('ignore_certificate').checked ? 'true' : 'false',
+                auto_reconnect: document.getElementById('auto_reconnect').checked ? 'true' : 'false'
+            };
+        }
+        
+        function testConnection() {
+            if (!validateForm()) {
+                return;
+            }
+            
+            const settings = getSettings();
+            console.log('TEST_CONNECTION:' + JSON.stringify(settings));
+            showStatus('Testing connection to ' + settings.server + '...', true);
+        }
+        
+        function saveSettings() {
+            if (!validateForm()) {
+                return;
+            }
+            
+            const settings = getSettings();
+            console.log('SAVE_SETTINGS:' + JSON.stringify(settings));
+            showStatus('Settings saved successfully!', true);
+        }
+        
+        function cancelSettings() {
+            console.log('CANCEL');
+            window.close();
+        }
+    </script>
+</body>
+</html>
+EOF
+
+# Function to test connection
+test_connection() {
+    SERVER="$1"
+    PORT=$(echo "$SERVER" | grep -o ':[0-9]*$' | cut -d: -f2)
+    HOST=$(echo "$SERVER" | cut -d: -f1)
+    PORT=${PORT:-3389}  # Default RDP port if not specified
+    
+    # Try to ping the server first
+    if ping -c 1 -W 2 "$HOST" > /dev/null 2>&1; then
+        return 0  # Server is reachable
+    else
+        # Try TCP connection if ping fails (some servers block ICMP)
+        if nc -z -w2 "$HOST" "$PORT" > /dev/null 2>&1; then
+            return 0  # Server is reachable via TCP
+        else
+            return 1  # Server is not reachable
+        fi
+    fi
+}
+
+# Use zenity to display the HTML dialog
+export DISPLAY=:0
+RESULT=$(zenity --width=800 --height=600 --title="RDP Connection Settings" --html --url="file://$TEMP_HTML" 2>&1)
+
+# Process the result
+if [[ "$RESULT" == *"TEST_CONNECTION:"* ]]; then
+    # Extract settings
+    SETTINGS=$(echo "$RESULT" | grep "TEST_CONNECTION:" | cut -d':' -f2-)
+    SERVER=$(echo "$SETTINGS" | jq -r '.server')
+    
+    # Test connection
+    if test_connection "$SERVER"; then
+        zenity --info --title="Connection Test" --text="Successfully connected to $SERVER" --width=300
+    else
+        zenity --error --title="Connection Test" --text="Failed to connect to $SERVER.\n\nPlease check:\n- Server is powered on\n- Network connection is working\n- Server address is correct" --width=350
+    fi
+    
+    # Reopen settings dialog
+    exec "$0"
+    exit 0
+elif [[ "$RESULT" == *"SAVE_SETTINGS:"* ]]; then
+    # Extract settings
+    SETTINGS=$(echo "$RESULT" | grep "SAVE_SETTINGS:" | cut -d':' -f2-)
+    SERVER=$(echo "$SETTINGS" | jq -r '.server')
+    USERNAME=$(echo "$SETTINGS" | jq -r '.username')
+    DOMAIN=$(echo "$SETTINGS" | jq -r '.domain')
+    PASSWORD=$(echo "$SETTINGS" | jq -r '.password')
+    USB_REDIRECTION=$(echo "$SETTINGS" | jq -r '.usb_redirection')
+    IGNORE_CERTIFICATE=$(echo "$SETTINGS" | jq -r '.ignore_certificate')
+    AUTO_RECONNECT=$(echo "$SETTINGS" | jq -r '.auto_reconnect')
+    
+    # Update config file
+    sed -i "s/^SERVER=.*/SERVER=$SERVER/" "$CONFIG_FILE"
+    sed -i "s/^DOMAIN=.*/DOMAIN=$DOMAIN/" "$CONFIG_FILE"
+    sed -i "s/^USERNAME=.*/USERNAME=$USERNAME/" "$CONFIG_FILE"
+    sed -i "s/^USB_REDIRECTION=.*/USB_REDIRECTION=$USB_REDIRECTION/" "$CONFIG_FILE"
+    sed -i "s/^IGNORE_CERTIFICATE=.*/IGNORE_CERTIFICATE=$IGNORE_CERTIFICATE/" "$CONFIG_FILE"
+    sed -i "s/^AUTO_RECONNECT=.*/AUTO_RECONNECT=$AUTO_RECONNECT/" "$CONFIG_FILE"
+    
+    # Update password if provided
+    if [ -n "$PASSWORD" ]; then
+        echo "$PASSWORD" > "$CREDENTIALS_FILE"
+        chmod 600 "$CREDENTIALS_FILE"
+    fi
+    
+    # Show success message
+    zenity --info --title="Settings Saved" --text="Connection settings have been updated.\n\nConnecting to $SERVER..." --timeout=2
+    
+    # Launch RDP client
+    exec /usr/local/bin/rdp-client
+    exit 0
+fi
+
+# Remove temporary HTML file
+rm -f "$TEMP_HTML"

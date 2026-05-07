@@ -1,0 +1,144 @@
+#!/bin/bash
+
+# This script monitors network connectivity and RDP session status
+# It automatically restarts the RDP client if the connection is lost or if the server becomes unreachable
+
+# Configuration file path
+CONFIG_FILE="/etc/rdp-client/config"
+
+# Log file
+LOG_FILE="/var/log/rdp-client/network-monitor.log"
+
+# Create log directory if it doesn't exist
+mkdir -p $(dirname "$LOG_FILE")
+touch "$LOG_FILE"
+chmod 644 "$LOG_FILE"
+
+# Function to log messages
+log_message() {
+    echo "$(date): $1" >> "$LOG_FILE"
+}
+
+log_message "Network monitor service started"
+
+# Function to check if the RDP server is reachable
+check_server_reachable() {
+    if [ -f "$CONFIG_FILE" ]; then
+        SERVER=$(grep "^SERVER=" "$CONFIG_FILE" | cut -d= -f2)
+        if [ -n "$SERVER" ]; then
+            # Extract hostname from server address (remove port if present)
+            HOST=$(echo "$SERVER" | cut -d: -f1)
+            
+            # Try to ping the server
+            if ping -c 1 -W 2 "$HOST" > /dev/null 2>&1; then
+                return 0  # Server is reachable
+            else
+                # Try TCP connection if ping fails (some servers block ICMP)
+                PORT=$(echo "$SERVER" | grep -o ':[0-9]*$' | cut -d: -f2)
+                PORT=${PORT:-3389}  # Default RDP port if not specified
+                
+                if nc -z -w2 "$HOST" "$PORT" > /dev/null 2>&1; then
+                    return 0  # Server is reachable via TCP
+                else
+                    return 1  # Server is not reachable
+                fi
+            fi
+        fi
+    fi
+    return 1  # No server configured or file doesn't exist
+}
+
+# Function to check if an RDP session is active
+check_rdp_session_active() {
+    # First check if xfreerdp process exists
+    if pgrep -f "xfreerdp" > /dev/null; then
+        # Check if the process is actually responding and not just a zombie
+        if ps aux | grep xfreerdp | grep -v grep | grep -v "defunct" > /dev/null; then
+            # Check if the process has been running for at least 5 seconds
+            # This prevents false positives during startup
+            OLDEST_PID=$(pgrep -f "xfreerdp" | head -n 1)
+            if [ -n "$OLDEST_PID" ]; then
+                # Get process start time in seconds since boot
+                START_TIME=$(ps -o etimes= -p "$OLDEST_PID" 2>/dev/null || echo "0")
+                if [ "$START_TIME" -gt 5 ]; then
+                    return 0  # Session is active and stable
+                fi
+            fi
+        fi
+    fi
+    return 1  # No active session or session is not stable yet
+}
+
+# Function to restart the RDP client
+restart_rdp_client() {
+    log_message "Restarting RDP client..."
+    
+    # Kill any existing xfreerdp processes
+    pkill -9 xfreerdp
+    
+    # Wait a moment for the process to terminate
+    sleep 2
+    
+    # Start the RDP client
+    DISPLAY=:0 nohup /usr/local/bin/rdp-client > /dev/null 2>&1 &
+    
+    log_message "RDP client restarted"
+}
+
+# Initial delay to allow system to fully boot
+sleep 10
+
+log_message "Network monitoring started"
+
+# Connection status tracking
+SERVER_UNREACHABLE_COUNT=0
+MAX_UNREACHABLE_COUNT=5  # Increased number of consecutive failures before taking action
+
+# Check if auto-reconnect is enabled in config
+AUTO_RECONNECT_ENABLED=true
+if [ -f "$CONFIG_FILE" ]; then
+    AUTO_RECONNECT_SETTING=$(grep "^AUTO_RECONNECT=" "$CONFIG_FILE" | cut -d= -f2)
+    if [ "$AUTO_RECONNECT_SETTING" = "false" ]; then
+        AUTO_RECONNECT_ENABLED=false
+        log_message "Auto-reconnect is disabled in configuration"
+    fi
+fi
+
+# Track when the last session ended
+LAST_SESSION_END_TIME=0
+# Minimum time to wait before reconnecting (in seconds)
+MIN_RECONNECT_DELAY=10
+
+# Main loop
+while true; do
+    # Check if the server is reachable
+    if check_server_reachable; then
+        # Server is reachable, reset counter
+        if [ $SERVER_UNREACHABLE_COUNT -gt 0 ]; then
+            log_message "RDP server is now reachable"
+            SERVER_UNREACHABLE_COUNT=0
+        fi
+        
+        # Only log the session status but don't restart it
+        if ! check_rdp_session_active; then
+            log_message "No active RDP session detected, but not restarting automatically"
+        else
+            log_message "RDP session is active and stable"
+        fi
+    else
+        # Server is not reachable
+        SERVER_UNREACHABLE_COUNT=$((SERVER_UNREACHABLE_COUNT + 1))
+        
+        if [ $SERVER_UNREACHABLE_COUNT -eq 1 ]; then
+            log_message "RDP server is not reachable. Monitoring connectivity..."
+        fi
+        
+        # Just log the unreachable status but don't take action
+        if [ $SERVER_UNREACHABLE_COUNT -ge $MAX_UNREACHABLE_COUNT ]; then
+            log_message "RDP server has been unreachable for $SERVER_UNREACHABLE_COUNT checks"
+        fi
+    fi
+    
+# Check every 30 seconds to reduce the frequency of reconnection attempts
+sleep 30
+done

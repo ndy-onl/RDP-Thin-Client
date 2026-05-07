@@ -1,0 +1,42 @@
+#!/bin/bash
+
+# Hardcoded Fail-Safe Variables
+SERVER="your.server.ip"
+USERNAME="YOUR_USERNAME"
+PASSWORD="YOUR_PASSWORD"
+DOMAIN="H9"
+
+# Build the final verified RDP command
+RDP_CMD="xfreerdp /v:$SERVER /u:$USERNAME /p:$PASSWORD /d:$DOMAIN /sec:rdp /network:lan /dynamic-resolution /cert-ignore /cert:ignore /cert-tofu +clipboard /f"
+
+# Optional features from config
+CONFIG_FILE="/etc/rdp-client/config"
+if [ -f "$CONFIG_FILE" ]; then
+    source "$CONFIG_FILE"
+fi
+
+if [ "$USB_REDIRECTION" = "true" ]; then
+    RDP_CMD="$RDP_CMD /usb:auto"
+fi
+
+if [ "$AUTO_RECONNECT" = "true" ]; then
+    RDP_CMD="$RDP_CMD /auto-reconnect /auto-reconnect-max-retries:20"
+fi
+
+# Log the connection attempt
+echo "$(date): Connecting to $SERVER as $DOMAIN\\$USERNAME" > /var/log/rdp-client.log
+
+# Execute FreeRDP
+export DISPLAY=:0
+export XAUTHORITY=/var/run/lightdm/root/:0
+xhost +local:all > /dev/null 2>&1
+
+# Kill any existing instances first
+pkill -9 xfreerdp
+
+# Execute
+$RDP_CMD
+
+# Debug
+EXIT_CODE=$?
+echo "$(date): xfreerdp exited with code $EXIT_CODE" >> /var/log/rdp-client.log

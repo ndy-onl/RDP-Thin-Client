@@ -1,0 +1,24 @@
+#!/bin/bash
+
+# This script sets up a hotkey (F8) to launch the RDP settings application
+# It should be added to the autostart configuration
+
+# Make sure xbindkeys is installed
+if ! command -v xbindkeys &> /dev/null; then
+    echo "xbindkeys is not installed. Installing..."
+    apt-get update && apt-get install -y xbindkeys
+fi
+
+# Create xbindkeys config file
+mkdir -p ~/.xbindkeys
+cat > ~/.xbindkeysrc << EOF
+# Launch RDP Settings with F8
+"zenity --info --text='Opening RDP Settings...' --timeout=1 && /usr/local/bin/rdp-settings"
+    F8
+EOF
+
+# Start xbindkeys
+killall xbindkeys 2>/dev/null
+xbindkeys
+
+echo "F8 hotkey for RDP settings configured"

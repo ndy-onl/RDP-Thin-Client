@@ -1,0 +1,8 @@
+# Git ignores
+.DS_Store
+*.iso
+*.deb
+ndy-thin-client/
+tool-outputs/
+tmp/
+*.log

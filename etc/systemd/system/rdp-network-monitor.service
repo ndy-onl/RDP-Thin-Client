@@ -1,0 +1,12 @@
+[Unit]
+Description=RDP Network Connectivity Monitor
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/rdp-network-monitor
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

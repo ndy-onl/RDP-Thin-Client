@@ -1,0 +1,8 @@
+[Plymouth Theme]
+Name=Custom Spinner No Logos
+Description=Custom theme with spinner and no watermarks
+ModuleName=script
+
+[script]
+ImageDir=/usr/share/plymouth/themes/custom-spinner-nologos
+ScriptFile=/usr/share/plymouth/themes/custom-spinner-nologos/custom-spinner-nologos.script
