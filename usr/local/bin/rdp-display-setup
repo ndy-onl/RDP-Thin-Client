@@ -6,12 +6,13 @@
 export DISPLAY=:0
 export XAUTHORITY=/home/rdpuser/.Xauthority
 
-# Set background color to match branding
+# Set background color to match branding (Neutral Gray)
 xsetroot -solid "#333333"
 
-# Set cursor theme
-export XCURSOR_THEME=Adwaita
+# Force standard cursor (remove the big X)
 xsetroot -cursor_name left_ptr
+export XCURSOR_THEME=Adwaita
+export XCURSOR_SIZE=24
 
 # Create desktop directory and add RDP settings shortcut
 mkdir -p /home/rdpuser/Desktop

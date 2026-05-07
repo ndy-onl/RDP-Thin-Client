@@ -20,8 +20,9 @@ while ! xset q &>/dev/null; do
 done
 
 # Check if we have a valid server or if we should open settings
-if [ -z "$SERVER" ] || [ "$SERVER" == "rdp-server-ip" ] || [ "$SERVER" == "your.server.ip" ]; then
-    echo "$(date): No valid server found, launching settings UI" >> $LOG_FILE
+# Detecting any variant of placeholder strings
+if [[ -z "$SERVER" || "$SERVER" == *"your"* || "$SERVER" == *"rdp-server"* ]]; then
+    echo "$(date): Placeholder config detected, launching settings UI" >> $LOG_FILE
     /usr/local/bin/rdp-settings
     # Re-source after settings might have changed
     [ -f "$CONFIG_FILE" ] && source "$CONFIG_FILE"
@@ -29,9 +30,13 @@ fi
 
 xhost +local:all >> $LOG_FILE 2>&1
 
-# RDP Befehl zusammenbauen (UPN Bypass Konfiguration)
-# Note: If USERNAME already contains @, we use it as is.
-RDP_OPTS="/v:$SERVER /u:$USERNAME /p:$PASSWORD /sec:rdp -sec-tls -sec-nla -gfx -rfx /gdi:sw /size:3840x1080 /f -dynamic-resolution /bpp:16 -bitmap-cache -glyph-cache -offscreen-cache -themes -wallpaper -aero +fonts +clipboard /usb:auto /cert-ignore /cert:ignore /cert-tofu /auto-reconnect /auto-reconnect-max-retries:20"
+# RDP Befehl zusammenbauen (FreeRDP 3 compatibility)
+# Removed -sec-tls and other problematic '-' flags
+RDP_OPTS="/v:$SERVER /u:$USERNAME /p:$PASSWORD /gfx /rfx /gdi:sw /size:3840x1080 /f /dynamic-resolution /bpp:16 /bitmap-cache /glyph-cache /offscreen-cache +themes +wallpaper +aero +fonts +clipboard /usb:auto /cert:ignore /auto-reconnect /auto-reconnect-max-retries:20"
+
+if [ ! -z "$DOMAIN" ]; then
+    RDP_OPTS="/d:$DOMAIN $RDP_OPTS"
+fi
 
 # Detect xfreerdp binary (Debian 12 vs 13)
 if command -v xfreerdp3 &>/dev/null; then
@@ -45,7 +50,7 @@ fi
 
 RDP_CMD="$XFREERDP_BIN $RDP_OPTS"
 
-echo "$(date): Starte Befehl mit $XFREERDP_BIN: $XFREERDP_BIN /v:$SERVER /u:$USERNAME ..." >> $LOG_FILE
+echo "$(date): Starte Befehl: $RDP_CMD" >> $LOG_FILE
 
 while true; do
     # Kill any stray processes
@@ -55,7 +60,11 @@ while true; do
     # Execute
     $RDP_CMD >> $LOG_FILE 2>&1
     EXIT_CODE=$?
-    echo "$(date): xfreerdp beendet mit Code $EXIT_CODE" >> $LOG_FILE
+    echo "$(date): $XFREERDP_BIN beendet mit Code $EXIT_CODE" >> $LOG_FILE
     
-    sleep 5
+    # If the user exited normally or there's a serious error, maybe show settings
+    if [ $EXIT_CODE -ne 0 ]; then
+         sleep 2
+    fi
+    sleep 3
 done
