@@ -14,6 +14,12 @@ xsetroot -cursor_name left_ptr
 export XCURSOR_THEME=Adwaita
 export XCURSOR_SIZE=24
 
+# Apply logo branding if available
+LOGO_PATH="/usr/local/share/branding/logo-login.png"
+if [ -f "$LOGO_PATH" ]; then
+    feh --bg-fill "#333333" --bg-center --no-xinerama --geometry -40+40 "$LOGO_PATH"
+fi
+
 # Create desktop directory and add RDP settings shortcut
 mkdir -p /home/rdpuser/Desktop
 cp /usr/share/applications/rdp-settings.desktop /home/rdpuser/Desktop/
